@@ -35,6 +35,12 @@ def preprocess_image(file):
     return img_array
 
 
+@app.on_event("startup")
+async def startup_event():
+    """Load the model when the app starts."""
+    get_model()
+
+
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     """Handle image upload and return prediction."""
