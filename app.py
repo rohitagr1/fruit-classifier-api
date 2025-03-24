@@ -1,13 +1,14 @@
 import os
 import gdown
 import numpy as np
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import JSONResponse
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing import image
 from io import BytesIO
 from PIL import Image
 
-app = Flask(__name__)
+app = FastAPI()
 MODEL_PATH = "fruit_classifier.h5"
 MODEL_ID = "1pmBmVyZWMuuOml-RRb0fqhlu22cnWpLt"  # Google Drive ID
 LABELS = ['freshapples', 'freshbanana', 'freshoranges',
@@ -28,25 +29,35 @@ def get_model():
 
 def preprocess_image(file):
     """Preprocess image directly from memory (no file saving)."""
-    img = Image.open(BytesIO(file.read())).resize((224, 224))  # Adjust size as per model input
+    img = Image.open(BytesIO(file)).resize((224, 224))  # Adjust size as per model input
     img_array = np.array(img) / 255.0  # Normalize
     img_array = np.expand_dims(img_array, axis=0)
     return img_array
 
 
-@app.route('/predict', methods=['POST'])
-def predict():
+@app.post("/predict")
+async def predict(file: UploadFile = File(...)):
     """Handle image upload and return prediction."""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
+    try:
+        # Read file as bytes
+        img_data = await file.read()
 
-    img = preprocess_image(request.files['file'])  # Process image
-    model = get_model()  # Load model only if needed
-    preds = model.predict(img)
-    predicted_label = LABELS[np.argmax(preds)]  # Get predicted class
+        # Preprocess image
+        img = preprocess_image(img_data)
 
-    return jsonify({'prediction': predicted_label})
+        # Load model only if needed
+        model = get_model()
+
+        # Make prediction
+        preds = model.predict(img)
+        predicted_label = LABELS[np.argmax(preds)]  # Get predicted class
+
+        return JSONResponse(content={'prediction': predicted_label})
+    except Exception as e:
+        return JSONResponse(content={'error': str(e)}, status_code=400)
 
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=5000)
